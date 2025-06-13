@@ -2,8 +2,8 @@
 ## Kendim için k8s özellikleri ve kullanımı
 
 ## İçindekiler
-- [Kubectl Config](#kubectl-config)
-- [Kubectl Kullanımı](#kubectl-kullanımı)
+- [Kubectl Config](#kubectl-config-)
+- [Kubectl Kullanımı](#kubectl-kullanımı-)
 ## Kubectl Config <a name="my-custom-anchor-point"></a>
 
 - `kubectl config get-contexts` // mevcut contextleri listeler
