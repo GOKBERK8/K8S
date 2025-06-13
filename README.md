@@ -2,15 +2,44 @@
 ## Kendim için k8s özellikleri ve kullanımı
 
 ## İçindekiler
-- [Kubectl Config](https://github.com/selingvler/A-dan-Z-ye-Docker-E-itimi#giri%C5%9F)
-### Kubectl Config
+- [Kubectl Config](#kubectl-config)
+- [Kubectl Kullanımı](#kubectl-kullanımı)
+## Kubectl Config <a name="my-custom-anchor-point"></a>
 
 - `kubectl config get-contexts` // mevcut contextleri listeler
 - `kubectl config current-context` // kullanılan contexti söyler
 - `kubectl config use-context "minikube"` // context değiştirmek için kullanılan komut burda ise minikube contextini varsayılan olarak ayarla diyoruz
 - `kubectl get nodes` // varsayılan context i getirir, bilgilerini gösterir
+fghdfghfg
 
-### Kubectl Kullanımı
+fgdhfghfg
+
+hfgdhfgh
+
+fgdhfgdh
+
+fgdhfgd
+
+hfdghfgd
+
+hfdghfgd
+
+
+hfdghfdg
+
+hfdgh
+
+fgdhdfgh
+
+gfdhfgdh
+
+fdghfghd
+
+fdghfg
+
+dhfdgh
+
+### Kubectl Kullanımı <a name="my-custom-anchor-point1"></a>
 - `kubectl cluster-info` // kubernetes cluster ile ilgili temel bir bilgi edinmek için kullandığımız komut
 - `kubectl` // bu komut ile kullanabileceğimiz komutları bize listeler
 - `kubectl .... --help` // "...." ile belirttiğim yere herhangi bir komut yazıp yanına --help eklediğim zamanda bu kullandığım komutun nasıl kullanıldığı ve ne işe yaradığı hakkında bilgileri elde edebilirim
