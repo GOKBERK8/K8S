@@ -167,6 +167,240 @@
 `kubectl exec -it multicontainer -c sidecarcontainer -- /bin/sh`
 - Bu kod ile multicontainer içindeki bir başka container a geçebiliriz.
 
+### İnit Container
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: initcontainerpod
+          spec:
+            containers:
+            - name: appcontainer
+              image: busybox
+              command: ['sh', '-c', 'echo The app is running! && sleep 3600']
+          initContainers:
+          - name: initcontainer
+            image: busybox
+            command: ['sh', '-c', "until nslookup myservice.default.svc.cluster.local; do echo waiting for nslookup myservice.default.svc.cluster.local; sleep 2; done"]
+
+- İnit containerlar bizim ana containerımız başlatılmadan önce yapılması gerekenleri yapan bir container
+- İnit container tamamlanmadan ana container başlatılmaz
+
+### LABEL
+`kubectl get pods -l "app" --show-labels`
+- Bu komut sayesinde podları listelerken app anahtarına sahip bütün podları listeler
+
+`kubectl get pods -l "app=firstapp" --show-labels`
+- Aralığı daha da daraltmak için değerini de verirsek aralığımız küçülür.
+
+`kubectl get pods -l "app=firstapp,tier=frontend" --show-labels`
+- "," koyarak ekstra olarak aralığımızı daraltabiliriz. "," ve anlamına gelmektedir.
+
+`kubectl get pods -l "app=firstapp,tier!=frontend" --show-labels`
+- "!" ile yazdığımız kriterin dışında olanları listeler.
+
+**Farklı Bir Kullanım Olarak**
+
+`kubectl get pods -l 'app in (firstapp)' --show-labels` 
+
+- Bu komut sayesinde podları listelerken app anahtarına sahip bütün podları listeler
+
+`kubectl get pods -l 'app in (firstapp,secondapp)' --show-labels`
+
+- Burda ise app i firstapp ve secondapp değerlerine sahip olanları listeler
+
+`kubectl get pods -l 'app notin (firstapp)' --show-labels`
+
+- Bu komutta yazdığımızın dışındakileri listelemesini istiyoruz
+
+`kubectl get pods -l 'app,app notin (firstapp)' --show-labels`
+
+- Burda ise app anahtarı olanların içinde firstapp olmayanları listeliyoruz.
+
+`kubectl get pods -l 'app,app notin (firstapp), tier in (frontend)' --show-labels`
+
+`kubectl label pods pod9 app=thirdapp`
+
+- Burda app anahtarının altında thirdapp değerinde yeni bir label eklemesini yapıyoruz.
+- Bu labeli daha sonradan kaldırmak için ise
+
+`kubectl label pods pod9 app-`
+
+`kubectl label --overwrite pods pod9 team=team3`
+- Bu kodla ise güncelleme yapabiliyoruz.
+
+`kubectl label pods --all foo=bar`
+- Bütün podlara label ekleme komutu.
+
+### Annotations
+          annotations:
+              owner: "Gokberk Gokalan"
+              notification-email: "admin@k8sfundamentals.com"
+              releasedate: "01.01.2021"
+              nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+- Label olarak eklememizin sakıncalı olacağı bilgileri açıklama "annotation" olarak ekleriz
+
+`kubectl apply -f podannotation.yaml`
+
+`kubectl describe pods annotationpod`
+
+Annotations:      nginx.ingress.kubernetes.io/force-ssl-redirect: true
+                  notification-email: admin@k8sfundamentals.com
+                  owner: Gokberk Gokalan
+                  releasedate: 01.01.2021
+  
+- Bir nevi açıklamadır.
+
+`kubectl annotate pods annotationpod foo=bar`
+
+- Bu komut ile annotation ekleme yapabiliriz.
+
+`kubectl annotate pods annotationpod foo-`
+
+- Bu kodla da eklediğimiz annotation u kaldırabilriz.
+
+### Namespace
+`kubectl get pods --namespace kube-system`
+
+- Sadece istediğimiz namesoace i listeler
+
+`kubectl get pods -A`
+
+- Bütün namespaceleri listeler.
+  
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: development
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            namespace: development
+            name: namespacepod
+          spec:
+            containers:
+            - name: namespacecontainer
+              image: nginx:latest
+              ports:
+              - containerPort: 80
+  
+- Namespacelari yaml olarakta tanımlayabilriz.
+
+`kubectl get pods -n development`
+
+- Tanımlı oldupu namespace ile çağırılabilir.
+ 
+- Sadece belli bir namespace üzerinde çalışacaksak Aşağıdaki kod ile varsayılan namespace i değiştirebiliriz.
+
+`kubectl config set-context --current --namespace=development`
+
+- Namespace silmek için ise;
+  
+`kubectl delete namespaces development`
+
+### Deployment
+- Deployment'lar sürekli güncelleme yapacağım aynı türden containerların oluşmasını sağlayan bir komut.
+
+`kubectl create deployment firstdeployment --image=nginx:latest --replicas=2`
+
+- Bu komut ile isim, imaj ve kaç tane olacağını girerek deployment oluşturabiliriz.
+
+`kubectl delete pods firstdeployment-5b665bb68f-nbsqz`
+
+- Bu komut ile sildiğimizde ise 1 tanesini sildiğimiz ve geriye 1 tane kaldığı için isteklerimizle uyuşmadığından yeniden 1 tane daha pod oluşturur
+
+`kubectl set image deployment/firstdeployment nginx=httpd`
+
+- İlk ayarladığımız imajı bu şekilde değiştirebiliriz.
+
+`kubectl scale deployment firstdeployment --replicas=5`
+
+- Bu komut ile kaç tane oluşturacağımızı değiştirebiliriz (arttırıp, azaltılabilir)
+
+` kubectl delete deployments firstdeployment`
+
+- Bu komut ile de oluşturduğumuz deployment ı kaldırabiliriz.
+
+**Bu şekilde imperative şekilde oluşturup düzenlemeyi gördük.**
+
+**Sırada ise Declarative şeklinde oluşturmaya bakalım**
+
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: firstdeployment
+            labels:
+              team: development
+          spec:
+            replicas: 3
+            selector:
+              matchLabels:
+                app: frontend
+            template:
+              metadata:
+                name: examplepod
+                labels:
+                  app: frontend
+              spec:
+                containers:
+                - name: nginx
+                  image: nginx:latest
+                  ports:
+                  - containerPort: 80
+
+`kubectl rollout undo deployment firstdeployment`
+
+- Bu kod yaptığımız değişiklikleri geri almamızı sağlar.
+- Replicaset sayesinde bu işlemi yapabiliriz.
+- Replicaset objesi oluşturmak yerine deployment kullanırız bunlar beraber çalışmaktadır.
+
+### Rollout ve Rollback
+
+`kubectl edit deployment rolldeployment --record`
+
+- Değiklik yapmamızı sağlar ve bu değişikliği record komutu ile kaydederiz.
+
+`kubectl set image deployment rolldeployment nginx=httpd:alpine --record=true`
+
+- Burda set komutu ile güncelleme yapıyoruz set ediyoruz.
+
+`kubectl rollout history deployment rolldeployment`
+
+- Bu komutta yaptığımız değişikliklerin tarihçesini revisionlarını bize listeler.
+
+`kubectl rollout undo deployment rolldeployment --to-revision=3`
+
+- Bu komut ile istediğimiz revision u tekrardan geri alabilme şansımız olmakta.
+
+
+
+
+
+ 
+  
+  
+            
+          
+          
+          
+          
+          
+          
+          
+          
+            
+
+
+
+
+
+
+
+
+
+
 
 
 
