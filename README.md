@@ -604,13 +604,302 @@ Annotations:      nginx.ingress.kubernetes.io/force-ssl-redirect: true
                 - name: database
                   value: "testdb.example.com"
 
+### Volume
 
+          volumeMounts:
+              - name: directory-vol
+                mountPath: /dir1
+              - name: dircreate-vol
+                mountPath: /cache
+              - name: file-vol
+                mountPath: /cache/config.json       
+            volumes:
+            - name: directory-vol
+              hostPath:
+                path: /tmp
+                type: Directory
+            - name: dircreate-vol
+              hostPath:
+                path: /cache
+                type: DirectoryOrCreate
+            - name: file-vol
+              hostPath:
+                path: /cache/config.json
+                type: FileOrCreate
 
+### Secret
 
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: mysecret
+          type: Opaque
+          stringData:
+            db_server: db.example.com
+            db_username: admin
+            db_password: P@ssw0rd!
+            
+`kubectl get secret`
 
+          NAME       TYPE     DATA   AGE
+          mysecret   Opaque   3      7s
 
+`kubectl describe secret mysecret`
 
+          Name:         mysecret
+          Namespace:    default
+          Labels:       <none>
+          Annotations:  <none>
+          
+          Type:  Opaque
+          
+          Data
+          ====
+          db_password:  9 bytes
+          db_server:    14 bytes
+          db_username:  5 bytes
 
+`kubectl create secret generic mysecret2 --from-literal=db_server=db.example.com --from-literal=db_username=admin --from-literal=db_password=password`
+
+- Bu da farklı bir şekilde tanımlama
+- Fakat bunu shell üzerinden yazdığım için birileri geçmişimden bunlara erişebilir
+
+`kubectl create secret generic mysecret3 --from-file=db_server=server.txt --from-file=db_username=username.txt --from-file=db_password=password.txt`
+
+- Shell geçmişinden verilerimin bulunmasını engellemek için txt dosyalarına yazarak koruyabilirim.
+
+`kubectl create secret generic mysecret4 --from-file=config.json`
+
+- Bunu bir json halinde de okutabiliriz.
+
+**Yaml Türünde Secret Oluşturma**
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: secretpodvolume
+          spec:
+            containers:
+            - name: secretcontainer
+              image: ozgurozturknet/k8s:blue
+              volumeMounts:
+              - name: secret-vol
+                mountPath: /secret
+            volumes:
+            - name: secret-vol
+              secret:
+                secretName: mysecret3
+
+`kubectl exec -it secretpodvolume -- bash`
+
+          bash-5.0# cd secret
+          bash-5.0# ls
+          db_password  db_server    db_username
+          bash-5.0# cat db_server
+          db.example.combash-5.0#
+
+**Diğer Bir Türü**
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: secretpodenv
+          spec:
+            containers:
+            - name: secretcontainer
+              image: ozgurozturknet/k8s:blue
+              env:
+                - name: username
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysecret3
+                      key: db_username
+                - name: password
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysecret3
+                      key: db_password
+                - name: server
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysecret3
+                      key: db_server          
+
+`kubectl exec secretpodenv -- printenv`
+
+          username=admin
+          password=P@ssw0rd!
+          server=db.example.com
+
+**Bir Diğer Türü**
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: secretpodenvall
+          spec:
+            containers:
+            - name: secretcontainer
+              image: ozgurozturknet/k8s:blue
+              envFrom:
+              - secretRef:
+                  name: mysecret3
+
+`kubectl exec secretpodenvall -- printenv`
+
+          db_server=db.example.com
+          db_username=admin
+          db_password=P@ssw0rd!
+
+**ConfigMap'lerde aynı şekilde secret'lar gibi oluşturuluyor**
+
+**Fakat bu ikisinin bir farkı bulunmakta gizli tutmamız gereken veriler için secret kullanırız**
+
+**ConfigMap'lerde gizli tutmamıza gerek olmayan bilgileri içerir**
+
+`kubectl create configmap myconfigmap --from-literal=background=blue --from-file=a.txt`
+
+### Node Affinity
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: nodeaffinitypod1
+          spec:
+            containers:
+            - name: nodeaffinity1
+              image: ozgurozturknet/k8s
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: app
+                      operator: In #In, NotIn, Exists, DoesNotExist
+                      values:
+                      - blue
+
+- Bu kodda "requiredDuringSchedulingIgnoredDuringExecution" kısmında anahtar app'in altında "blue" değeri olmadan oluşturulamaz çünkü required'dir
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: nodeaffinitypod2
+          spec:
+            containers:
+            - name: nodeaffinity2
+              image: ozgurozturknet/k8s
+            affinity:
+              nodeAffinity:
+                preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 1
+                  preference:
+                    matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - blue
+                - weight: 2
+                  preference:
+                    matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - red
+
+- Burda ise "preffered" olduğu için app'in altında blue veya red yok ise başka bir node bulup oluşturur.
+- Burda ekstra olarak weight kısmında weight i büyük olana öncelik verilir yani
+- Varsa ve boş ise öncelik red yoksa blue o da yok ise kendi başka bir node bulup oluşturur.
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: nodeaffinitypod3
+          spec:
+            containers:
+            - name: nodeaffinity3
+              image: ozgurozturknet/k8s
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: app
+                      operator: Exists #In, NotIn, Exists, DoesNotExist
+
+- Burda ise "app" anahtarı required fakat değeri herhangi bir şey olabilir.
+ 
+### Taint ve Toleration  
+
+`kubectl taint node minikube platform=production:NoSchedule`
+
+- Bu komut ile bir tolerasyon ekleyebiliyoruz
+- Bu tolerasyonu kaldırmak için ise;
+
+`kubectl taint node minikube platform-`
+
+- Komutunu kullanırız.
+
+**Test İçin Bir Pod Oluşturalım**
+
+`kubectl run test --image=nginx --restart=Never`
+
+- Bu podun bilgilerine baktığımızda bir uyarı ile karşılaşmaktayız.
+
+`kubectl describe pod test`
+
+Warning  FailedScheduling  29s   default-scheduler  0/1 nodes are available: 1 node(s) had untolerated taint {platform: production}. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+
+          toleratedpod1      0/1     Pending   0             0s
+          toleratedpod2      0/1     Pending   0             0s
+
+- Tolerasyon tanımladığımızdan, tolerasyon şartını sağlayana kadar pending'te kalırlar
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: toleratedpod1
+            labels:
+              env: test
+          spec:
+            containers:
+            - name: toleratedcontainer1
+              image: ozgurozturknet/k8s
+            tolerations:
+            - key: "platform"
+              operator: "Equal"
+              value: "production"
+              effect: "NoSchedule"
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: toleratedpod2
+            labels:
+              env: test
+          spec:
+            containers:
+            - name: toleratedcontainer2
+              image: ozgurozturknet/k8s
+            tolerations:
+            - key: "platform"
+              operator: "Exists"
+              effect: "NoSchedule"  
+
+- Toleration'u uyguladığımız vakit.
+
+`kubectl apply -f podtoleration.yaml`
+
+          toleratedpod1      0/1     ContainerCreating   0             0s
+          toleratedpod2      0/1     ContainerCreating   0             0s
+          toleratedpod1      1/1     Running             0             3s
+          toleratedpod2      1/1     Running             0             5s
+
+- Running aşamasına geçtiler.
+
+`kubectl taint node minikube color=blue:NoExecute`
+
+- Bu kodda var olmayan bir taint ekliyoruz ve NoExecute komutu ile bu taint'e sahip olmayanları kaldır komutu veriyoruz.
 
 
 
