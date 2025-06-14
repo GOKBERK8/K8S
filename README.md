@@ -8,6 +8,13 @@
 - [İmperative Yöntem](#i̇mperative-yöntem)
 - [YAML](#yaml)
 - [Declarative Yöntem](#declarative-yöntem)
+- [İnit Container](#i̇nit-container)
+- [LABEL](#label)
+- [Annotations](#annotations)
+- [Namespace](#namespace)
+- [Deployment](#deployment)
+- [Rollout ve Rollback](#rollout-ve-rollback)
+- [Service](#service)
 
 ## Kubectl Config 
 - `kubectl config get-contexts` // mevcut contextleri listeler
@@ -374,25 +381,228 @@ Annotations:      nginx.ingress.kubernetes.io/force-ssl-redirect: true
 
 - Bu komut ile istediğimiz revision u tekrardan geri alabilme şansımız olmakta.
 
+- Rollout yaparken sistemde bir sıkıntı çıktığı zaman ve hatayı bulmak istediğimiz zaman rollout'u durdurmamız için gereken kod
 
+`kubectl rollout pause deployment rolldeployment`
 
+- Devam ettirmek için ise gereken kod
 
+`kubectl rollout resume deployment rolldeployment`
 
- 
+### Service
+
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: backend
+          spec:
+            type: ClusterIP
+            selector:
+              app: backend
+            ports:
+              - protocol: TCP
+                port: 5000
+                targetPort: 5000
+
+`kubectl apply -f serviceClusterIP.yaml`
+
+- Bu kod ile backend service kurduk.
+- service/backend created
   
+`kubectl get service`
+
+           NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+           backend      ClusterIP   10.96.168.39   <none>        5000/TCP   12s
+
+`kubectl get pods`
+
+          NAME                       READY   STATUS    RESTARTS   AGE
+          backend-7586b7b49-98svd    1/1     Running   0          3m30s
+          backend-7586b7b49-j5w5j    1/1     Running   0          3m30s
+          backend-7586b7b49-svntl    1/1     Running   0          3m30s
+          frontend-fb99cc5df-fgzpp   1/1     Running   0          3m30s
+          frontend-fb99cc5df-mbzsv   1/1     Running   0          3m30s
+          frontend-fb99cc5df-rhpfs   1/1     Running   0          3m30s
+
+`kubectl exec -it frontend-fb99cc5df-fgzpp -- bash`
+
+- Bu komut ile bağlanıyoruz
+
+`bash-5.0# nslookup backend`
+
+          Server:         10.96.0.10
+          Address:        10.96.0.10:53
+
+          Name:   backend.default.svc.cluster.local
+          Address: 10.96.168.39
   
-            
-          
-          
-          
-          
-          
-          
-          
-          
-            
+- Burda bazı durumlarda doğrudan isim ile bağlanamıyoruz yani bu örnekte "backend" ismi ile bağlanabiliyoruz ama bazende "backend.default.svc.cluster.local" bu isimle bağlanmamız gerekiyor.
 
+`kubectl apply -f serviceNodePort.yaml`
 
+- service/frontend created
+
+`kubectl get service`
+
+          NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+          backend      ClusterIP   10.96.168.39   <none>        5000/TCP       3m35s
+          frontend     NodePort    10.96.79.62    <none>        80:30924/TCP   21s
+
+`minikube service --url frontend`
+
+- http://127.0.0.1:64412
+- Bu komut sayesinde bize bağlanabileceğimiz bir link oluşturuyor.
+
+`curl http://127.0.0.1:64412`
+
+- Bu komut ve bu adres ile dışardan bir kullanıcıymış gibi bağlanmayı deneyimlemeyi sağlıyor.
+
+`kubectl expose deployment backend --type=ClusterIP --name=backend`
+
+`kubectl expose deployment frontend --type=NodePort --name=frontend`
+
+- Bu şekilde de oluşturabilriz.
+          
+`kubectl get endpoints`
+
+          NAME         ENDPOINTS                                         AGE
+          backend      10.244.0.5:5000,10.244.0.6:5000,10.244.0.7:5000   3m44s
+          frontend     10.244.0.3:80,10.244.0.4:80,10.244.0.8:80         2m30s
+          
+`kubectl describe endpoints frontend`
+
+          Addresses:          10.244.0.3,10.244.0.4,10.244.0.8
+            NotReadyAddresses:  <none>
+            Ports:
+              Name     Port  Protocol
+              ----     ----  --------
+              <unset>  80    TCP
+
+### LivenessProbe
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              test: liveness
+            name: liveness-http
+          spec:
+            containers:
+            - name: liveness
+              image: k8s.gcr.io/liveness
+              args:
+              - /server
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                  httpHeaders:
+                  - name: Custom-Header
+                    value: Awesome
+                initialDelaySeconds: 3
+                periodSeconds: 3
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              test: liveness
+            name: liveness-exec
+          spec:
+            containers:
+            - name: liveness
+              image: k8s.gcr.io/busybox
+              args:
+              - /bin/sh
+              - -c
+              - touch /tmp/healthy; sleep 30; rm -rf /tmp/healthy; sleep 600
+              livenessProbe:
+                exec:
+                  command:
+                  - cat
+                  - /tmp/healthy
+                initialDelaySeconds: 5
+                periodSeconds: 5
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: goproxy
+            labels:
+              app: goproxy
+          spec:
+            containers:
+            - name: goproxy
+              image: k8s.gcr.io/goproxy:0.1
+              ports:
+              - containerPort: 8080
+              livenessProbe:
+                tcpSocket:
+                  port: 8080
+                initialDelaySeconds: 15
+                periodSeconds: 20
+
+          
+- Hataları bazen kubernetes farketmeyebilir çünkü çalışır durumda gözükmesi kubernetes için yeterlidir.
+- Bizim kodumuz çalışıyor gözüküp fakat bir şekilde bağlanamıyorsak gibi hataları bu sayede izlememizi sağlar.
+
+### Readiness Probe
+**Podun servis sunmaya hazır olduğunu check eder**
+- Bu da Liveness Probe gibi oluşturulabilir.
+- Deployment'ı güncellediğimiz zaman mesela "v2 imajı"
+- Bu yeni imajla yeni bir pod oluşturuldu
+- Yeni pod çalışmaya başladı
+- Readiness check mekanizması çalışmaya başladı
+- İnitialDelaySeconds (işlenmesi gereken istek süresi) kadar bekledi ardından ilk kontrol yapıldı
+- Kontrol sonucu olumlu olduğunda pod service'e eklendi
+- Eski pod'un service ile bağlantısı kesildi
+- Eski pod henüz kapatılmadı. İşlenmesi gereken istekler var ise işlemeye devam etmesi için.
+- Eski pod'un düzgünce kapatılması için sistem sigterm sinyali yolladı
+- Pod üzerindeki işlemleri tamamladıktan sonra kendini kapattı.
+          
+### Resource Limits
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            labels:
+              test: requestlimit
+            name: requestlimit
+          spec:
+            containers:
+            - name: requestlimit
+              image: ozgurozturknet/stress
+              resources:
+                requests:
+                  memory: "64M"
+                  cpu: "250m"
+                limits:
+                  memory: "256M"
+                  cpu: "0.5"
+
+- request kısmında minimum gereken kaynağı ayarlarız
+- limits kısmında ise bu container'ın en fazla ne kadar kaynak kullanabileceğini ayarlarız.
+- limit kısmında sistem daha fazla ram isteyebilir fakat biz kısıtladığımız için OOMKilled durumuna geçerek pod restart ediliyor.
+
+### Environment Variable
+
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: envpod
+            labels:
+              app: frontend
+          spec:
+            containers:
+            - name: envpod
+              image: ozgurozturknet/env:latest
+              ports:
+              - containerPort: 80
+              env:
+                - name: USER
+                  value: "Ozgur"
+                - name: database
+                  value: "testdb.example.com"
 
 
 
