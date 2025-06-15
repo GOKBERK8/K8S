@@ -901,6 +901,116 @@ Warning  FailedScheduling  29s   default-scheduler  0/1 nodes are available: 1 n
 
 - Bu kodda var olmayan bir taint ekliyoruz ve NoExecute komutu ile bu taint'e sahip olmayanları kaldır komutu veriyoruz.
 
+### Authentication
+
+**Key ve CSR oluşturma**
+
+`openssl genrsa -out gokberkgokalan.key 2048`
+
+`openssl req -new -key gokberkgokalan.key -out gokberkgokalan.csr -subj "/CN=gokberk@gokberkgokalan.net/O=DevTeam"`
+
+**CertificateSigningRequest oluşturma**
+
+          apiVersion: certificates.k8s.io/v1
+          kind: CertificateSigningRequest
+          metadata:
+            name: gokberkgokalan
+          spec:
+            groups:
+            - system:authenticated
+            request: $(cat gokberkgokalan.csr | base64 | tr -d "\n")
+            signerName: kubernetes.io/kube-apiserver-client
+            usages:
+            - client auth
+          EOF
+
+**CSR onaylama ve crt'yi alma**
+
+`kubectl get csr`
+
+- Pending aşamasında gözükmekte
+
+`kubectl certificate approve gokberkgokalan`
+
+- Approved, Issued aşamasına geçti
+
+`kubectl get csr gokberkgokalan -o jsonpath='{.status.certificate}' | base64 -d >> gokberkgokalan.crt`
+
+**kubectl config ayarları**
+
+`kubectl config set-credentials gokberk@gokberkgokalan.net --client-certificate=gokberkgokalan.crt --client-key=gokberkgokalan.key`
+
+`kubectl config set-context gokberkgokalan-context --cluster=minikube --user=gokberk@gokberkgokalan.net`
+
+`kubectl config use-context gokberkgokalan-context`
+
+### Role Based Access Control
+
+
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            namespace: default
+            name: pod-reader
+          rules:
+          - apiGroups: [""] # "" indicates the core API group
+            resources: ["pods"] # "services", "endpoints", "pods", "pods/log" etc.
+            verbs: ["get", "watch", "list"] # "get", "list", "watch", "post", "put", "create", "update", "patch", "delete"
+
+
+**Role Binding**
+
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: read-pods
+            namespace: default
+          subjects:
+          - kind: User
+            name: ozgur@ozgurozturk.net # "name" is case sensitive
+            apiGroup: rbac.authorization.k8s.io
+          roleRef:
+            kind: Role #this must be Role or ClusterRole
+            name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+            apiGroup: rbac.authorization.k8s.io
+
+
+**Cluster Role**
+
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: secret-reader
+          rules:
+          - apiGroups: [""]
+            resources: ["secrets"]
+            verbs: ["get", "watch", "list"]
+
+**Cluster Role Binding**
+
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: read-secrets-global
+          subjects:
+          - kind: Group
+            name: DevTeam # Name is case sensitive
+            apiGroup: rbac.authorization.k8s.io
+          roleRef:
+            kind: ClusterRole
+            name: secret-reader
+            apiGroup: rbac.authorization.k8s.io
+
+          
+
+            
+
+
+
+
+
+
+
 
 
 
